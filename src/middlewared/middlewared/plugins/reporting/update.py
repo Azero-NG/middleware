@@ -146,9 +146,7 @@ class ReportingService(ConfigService):
             'sh', '-c', 'rm --one-file-system -rf /var/db/collectd/rrd/*',
             check=False
         )
-        await self.middleware.call('reporting.setup')
         await self.middleware.call('service.start', 'rrdcached')
-
         if start_collectd:
             await self.middleware.call('service.start', 'collectd')
 
