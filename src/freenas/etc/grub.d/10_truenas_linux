@@ -124,6 +124,7 @@ linux_entry ()
   version="$2"
   type="$3"
   args="$4"
+  extitle="$5"
 
   if [ -z "$boot_device_id" ]; then
       boot_device_id="$(grub_get_device_id "${GRUB_DEVICE}")"
@@ -135,7 +136,7 @@ linux_entry ()
 	  init-*)
 	      title="$(gettext_printf "%s, with Linux %s (%s)" "${os}" "${version}" "${type#init-}")" ;;
 	  *)
-	      title="$(gettext_printf "%s, with Linux %s" "${os}" "${version}")" ;;
+	      title="$(gettext_printf "%s, with %s" "${os}" "${extitle}")" ;;
       esac
       if [ x"$title" = x"$GRUB_ACTUAL_DEFAULT" ] || [ x"Previous Linux versions>$title" = x"$GRUB_ACTUAL_DEFAULT" ]; then
 	  replacement_title="$(echo "Advanced options for ${OS}" | sed 's,>,>>,g')>$(echo "$title" | sed 's,>,>>,g')"
@@ -314,13 +315,11 @@ for dataset in `echo $datasets`; do
   fi
 
   truenas_version=`echo "$dataset" | sed "s|$roots_dataset/||"`
-  kernel_version=`zfs get -H -o value truenas:kernel_version "$dataset" 2>/dev/null`
-  if [ "x$kernel_version" = "x" -o "x$kernel_version" = "x-" ] ; then
-    continue
-  fi
+  kernel_version_prod=`dpkg -s linux-image-truenas-production-amd64 | grep '^Source:' | sed 's|Source: linux-||' 2>/dev/null`
+  kernel_version_dbg=`dpkg -s linux-image-truenas-debug-amd64 | grep '^Source:' | sed 's|Source: linux-||' 2>/dev/null`
 
   boot_device_id=
-  list="/boot/vmlinuz-$kernel_version"
+  list="/boot/vmlinuz-$kernel_version_prod /boot/vmlinuz-$kernel_version_dbg"
   LINUX_ROOT_DEVICE="ZFS=$dataset"
   OS="$OS_BASE $truenas_version"
 
@@ -427,8 +426,11 @@ while [ "x$list" != "x" ] ; do
     is_top_level=false
   fi
 
-  linux_entry "${OS}" "${version}" advanced \
-              "${GRUB_CMDLINE_LINUX} ${GRUB_CMDLINE_LINUX_DEFAULT}"
+  if echo ${version} | grep -q "debug"; then
+    linux_entry "${OS}" "${version}" advanced \
+        "${GRUB_CMDLINE_LINUX} ${GRUB_CMDLINE_LINUX_DEFAULT}" "Debug Linux Kernel"
+  fi
+
   for supported_init in ${SUPPORTED_INITS}; do
     init_path="${supported_init#*:}"
     if [ -x "${init_path}" ] && [ "$(readlink -f /sbin/init)" != "$(readlink -f "${init_path}")" ]; then
