@@ -168,7 +168,7 @@ class DNSService(Service):
                         ptr,
                         str(entry['ttl']),
                         'PTR',
-                        entry['name']
+                        entry['name'],
                         '\n'
                     ])
                     tmpfile.write(directive.encode())

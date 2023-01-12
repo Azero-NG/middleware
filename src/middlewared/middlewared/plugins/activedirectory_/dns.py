@@ -31,14 +31,14 @@ class ActiveDirectoryService(Service):
         netbiosname = self.middleware.call_sync('smb.config')['netbiosname_local']
         domain = ad['domainname']
 
-        hostname = f'{netbiosname]}.{domain}'
+        hostname = f'{netbiosname}.{domain}'
         try:
             dns_addresses = set([x['address'] for x in await self.middleware.call('dnsclient.forward_lookup', {
-                'names': [f'{netbios_name}.{domain_name}']
+                'names': [hostname]
             })])
         except dns.resolver.NXDOMAIN:
             self.logger.warning(
-                f'DNS lookup of {netbiosname}.{domain_name}. failed with NXDOMAIN'
+                f'DNS lookup of {hostname}. failed with NXDOMAIN'
                 'This main indicate that DNS entries for the computer account have already; '
                 'however, it may also indicate larger underlying DNS configuration issues.'
             )
@@ -49,7 +49,7 @@ class ActiveDirectoryService(Service):
             # raise a CallError here because we don't want someone fat-fingering
             # input and removing an unrelated computer in the domain.
             raise CallError(
-                f'DNS records inidcate that {netbiosname} may be associated '
+                f'DNS records indicate that {hostname} may be associated '
                 'with a different computer in the domain. Forward lookup returned the '
                 f'following results: {dns_addresses}.'
             )
@@ -57,6 +57,7 @@ class ActiveDirectoryService(Service):
         payload = []
 
         for ip in dns_addresses:
+            addr = ipaddress.ip_address(ip)
             payload.append({
                 'command': 'DELETE',
                 'name': hostname,
