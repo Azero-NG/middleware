@@ -124,8 +124,8 @@ def test_02_cleanup_nameserver(request):
     ips_to_remove = [rdata['address'] for rdata in res['result']]
 
     payload = []
-    for ip in ips_to_remove:
-        addr = ipaddress(ip)
+    for i in ips_to_remove:
+        addr = ipaddress(i)
         payload.append({
             'command': 'DELETE',
             'name': f'{hostname}.{AD_DOMAIN}.',
