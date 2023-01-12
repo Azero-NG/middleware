@@ -120,6 +120,11 @@ def test_02_cleanup_nameserver(request):
         'params': [{'names': [f'{hostname}.{AD_DOMAIN}']}]
     })
     error = res.get('error')
+
+    if error and error['trace']['class'] == 'NXDOMAIN':
+        # No entry, nothing to do
+        return
+
     assert error is None, str(error)
     ips_to_remove = [rdata['address'] for rdata in res['result']]
 

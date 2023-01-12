@@ -118,7 +118,7 @@ if 'ip' not in locals() and 'passwd' not in locals() and 'interface' not in loca
     exit()
 
 # create random hostname and random fake domain
-digit = ''.join(secrets.choice((string.ascii_letters + string.digits)) for i in range(10))
+digit = ''.join(secrets.choice((string.ascii_uppercase + string.digits)) for i in range(10))
 hostname = f'test{digit}'
 domain = f'test{digit}.nb.ixsystems.com'
 artifacts = f"{workdir}/artifacts/"
