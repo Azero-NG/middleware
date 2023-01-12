@@ -11,7 +11,7 @@ sys.path.append(apifolder)
 from assets.REST.directory_services import active_directory, override_nameservers
 from assets.REST.pool import dataset
 from auto_config import pool_name, ip, user, password, ha
-from functions import GET, POST, PUT, DELETE, SSH_TEST, cmd_test, wait_on_job
+from functions import GET, POST, PUT, DELETE, SSH_TEST, cmd_test, make_ws_request, wait_on_job
 from protocols import smb_connection, smb_share
 
 if ha and "hostname_virtual" in os.environ:
@@ -125,6 +125,17 @@ def test_07_enable_leave_activedirectory(request):
         assert results.json()['pw_name'] == AD_USER, results.text
         domain_users_id = results.json()['pw_gid']
 
+        res = make_ws_request(ip, {
+            'msg': 'method',
+            'method': 'dnsclient.forward_lookup',
+            'params': [{'names': [f'{hostname}.{AD_DOMAIN}'],
+        })
+        error = res.get('error')
+        assert error is None, str(error)
+        assert len(res['result']) != 0
+
+        addresses = [x['address'] for x in res['result']]
+        assert ip in addresses
 
     results = GET('/activedirectory/get_state/')
     assert results.status_code == 200, results.text
