@@ -116,6 +116,7 @@ class DNSService(Service):
                     Str('type', enum=['A', 'AAAA'], default='A'),
                     Int('ttl', default=3600),
                     IPAddr('address', required=True, excluded_address_types=['MULTICAST', 'GLOBAL', 'LOOPBACK', 'LINK_LOCAL', 'RESERVED']),
+                    Bool('do_ptr', default=True)
                 )
             ],
         ),
@@ -127,6 +128,7 @@ class DNSService(Service):
             self.middleware.call_sync('kerberos.check_ticket')
 
         with tempfile.NamedTemporaryFile(dir=MIDDLEWARE_RUN_DIR) as tmpfile:
+            ptrs = []
             for entry in data['ops']:
                 addr = ipaddress.ip_address(entry['address'])
 
@@ -150,6 +152,26 @@ class DNSService(Service):
                 ])
 
                 tmpfile.write(directive.encode())
+                if data['do_ptr']:
+                    ptrs.append(addr.reverse_pointer)
+
+            if ptrs:
+                # additional newline means "send"
+                # in this case we send our A and AAAA changes
+                # prior to sending our PTR changes
+                tmpfile.write(b'\n')
+
+                for ptr in ptrs:
+                    directive = ' '.join([
+                        'update',
+                        entry['command'].lower(),
+                        ptr,
+                        str(entry['ttl']),
+                        'PTR',
+                        entry['name']
+                        '\n'
+                    ])
+                    tmpfile.write(directive.encode())
 
             tmpfile.write(b'send\n')
             tmpfile.file.flush()

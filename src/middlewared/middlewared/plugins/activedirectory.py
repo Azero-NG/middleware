@@ -1019,6 +1019,9 @@ class ActiveDirectoryService(TDBWrapConfigService):
         if netads.returncode != 0:
             self.logger.warning("Failed to leave domain: %s", netads.stderr.decode())
 
+        job.set_progress(15, 'Removing DNS entries')
+        await self.middleware.call('activedirectory.unregister_dns', ad)
+
         job.set_progress(20, 'Removing kerberos keytab and realm.')
         krb_princ = await self.middleware.call(
             'kerberos.keytab.query',
