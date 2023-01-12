@@ -62,7 +62,7 @@ class ActiveDirectoryService(Service):
                 'command': 'DELETE',
                 'name': hostname,
                 'address': str(addr),
-                'type': 'A' if isinstance(addr, ipaddress.IPv4Address) else 'AAAA'
+                'type': 'A' if addr.version == 4 else 'AAAA'
             })
 
         try:
@@ -96,7 +96,7 @@ class ActiveDirectoryService(Service):
                 'command': 'ADD',
                 'name': hostname,
                 'address': str(addr),
-                'type': 'A' if isinstance(addr, ipaddress.IPv4Address) else 'AAAA'
+                'type': 'A' if addr.version == 4 else 'AAAA'
             })
 
         try:
