@@ -38,7 +38,7 @@ class ActiveDirectoryService(Service):
             })])
         except dns.resolver.NXDOMAIN:
             self.logger.warning(
-                f'DNS lookup of {hostname}. failed with NXDOMAIN'
+                f'DNS lookup of {hostname}. failed with NXDOMAIN. '
                 'This may indicate that DNS entries for the computer account have already been deleted; '
                 'however, it may also indicate the presence of larger underlying DNS configuration issues.'
             )
@@ -51,7 +51,7 @@ class ActiveDirectoryService(Service):
             raise CallError(
                 f'DNS records indicate that {hostname} may be associated '
                 'with a different computer in the domain. Forward lookup returned the '
-                f'following results: {dns_addresses}.'
+                f'following results: {", ".join(dns_addresses)}.'
             )
 
         payload = []
