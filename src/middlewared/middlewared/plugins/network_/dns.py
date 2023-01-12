@@ -137,14 +137,11 @@ class DNSService(Service):
             for entry in data['ops']:
                 addr = ipaddress.ip_address(entry['address'])
 
-                if entry['type'] == 'A' and not isinstance(addr, ipaddress.IPv4Address):
+                if entry['type'] == 'A' and not addr.version == 4:
                     raise CallError(f'{addr.compressed}: not an IPv4 address')
 
-                if entry['type'] == 'AAAA' and not isinstance(addr, ipaddress.IPv6Address):
+                if entry['type'] == 'AAAA' and not addr.version == 6:
                     raise CallError(f'{addr.compressed}: not an IPv6 address')
-
-                if addr.is_multicast:
-                    raise CallError(f'{addr.compressed}: address is reserved for multicast use')
 
                 directive = ' '.join([
                     'update',
