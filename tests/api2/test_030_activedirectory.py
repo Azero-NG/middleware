@@ -128,7 +128,7 @@ def test_07_enable_leave_activedirectory(request):
         res = make_ws_request(ip, {
             'msg': 'method',
             'method': 'dnsclient.forward_lookup',
-            'params': [{'names': [f'{hostname}.{AD_DOMAIN}'],
+            'params': [{'names': [f'{hostname}.{AD_DOMAIN}']}],
         })
         error = res.get('error')
         assert error is None, str(error)
