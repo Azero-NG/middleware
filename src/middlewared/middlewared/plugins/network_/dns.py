@@ -109,6 +109,8 @@ class DNSService(Service):
         Bool('use_kerberos', default=True),
         List(
             'ops',
+            required=True,
+            unique=True,
             items=[
                 Dict(
                     Str('command', enum=['ADD', 'DELETE'], required=True),
@@ -126,6 +128,9 @@ class DNSService(Service):
     def nsupdate(self, data):
         if data['use_kerberos']:
             self.middleware.call_sync('kerberos.check_ticket')
+
+        if len(data['ops']) == 0:
+            raise CallError('At least one nsupdate command must be specified')
 
         with tempfile.NamedTemporaryFile(dir=MIDDLEWARE_RUN_DIR) as tmpfile:
             ptrs = []
@@ -152,7 +157,7 @@ class DNSService(Service):
                 ])
 
                 tmpfile.write(directive.encode())
-                if data['do_ptr']:
+                if entry['do_ptr']:
                     ptrs.append(addr.reverse_pointer)
 
             if ptrs:

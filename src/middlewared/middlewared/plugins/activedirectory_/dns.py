@@ -24,11 +24,11 @@ class ActiveDirectoryService(Service):
         service = "activedirectory"
 
     @private
-    async def deregister_dns(self, ad):
+    async def unregister_dns(self, ad):
         if not ad['allow_dns_updates']:
             return
 
-        netbiosname = self.middleware.call_sync('smb.config')['netbiosname_local']
+        netbiosname = (await self.middleware.call('smb.config'))['netbiosname_local']
         domain = ad['domainname']
 
         hostname = f'{netbiosname}.{domain}'
@@ -39,8 +39,8 @@ class ActiveDirectoryService(Service):
         except dns.resolver.NXDOMAIN:
             self.logger.warning(
                 f'DNS lookup of {hostname}. failed with NXDOMAIN'
-                'This main indicate that DNS entries for the computer account have already; '
-                'however, it may also indicate larger underlying DNS configuration issues.'
+                'This may indicate that DNS entries for the computer account have already been deleted; '
+                'however, it may also indicate the presence of larger underlying DNS configuration issues.'
             )
             return
 
@@ -81,7 +81,7 @@ class ActiveDirectoryService(Service):
         if smb_ha_mode == 'CLUSTERED':
             vips = (await self.middleware.call('smb.bindip_choices')).values()
         else:
-            vips = [i['address'] for i in (await self.middleware.call('interface.ip_in_use', {'static': True}))]
+            vips = [i['address'] for i in (await self.middleware.call('interface.ip_in_use'))]
 
         smb_bind_ips = smb['bindip'] if smb['bindip'] else vips
         to_register = set(vips) & set(smb_bind_ips)
