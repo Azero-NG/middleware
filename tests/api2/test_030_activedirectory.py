@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import ipaddress
 import json
 import sys
 import pytest
@@ -71,6 +72,74 @@ def set_ad_nameserver(request):
 
 def test_01_set_nameserver_for_ad(set_ad_nameserver):
     assert set_ad_nameserver[1]['nameserver1'] == ADNameServer
+
+
+def test_02_cleanup_nameserver(request):
+    results = POST("/activedirectory/domain_info/", AD_DOMAIN)
+    assert results.status_code == 200, results.text
+    domain_info = results.json()
+
+    res = make_ws_request(ip, {
+        'msg': 'method',
+        'method': 'kerberos.get_cred',
+        'params': [{
+            'dstype': 'DS_TYPE_ACTIVEDIRECTORY',
+            'conf': {
+                'bindname': ADUSERNAME,
+                'bindpw': ADPASSWORD,
+                'domainname': AD_DOMAIN,
+            }
+        }],
+    })
+    error = res.get('error')
+    assert error is None, str(error)
+    cred = res['result']
+
+    res = make_ws_request(ip, {
+        'msg': 'method',
+        'method': 'kerberos.do_kinit',
+        'params': [{
+            'krb5_cred': cred,
+            'kinit-options': {
+                'kdc_override': {
+                    'domain': AD_DOMAIN.upper(),
+                    'kdc': domain_info['KDC server']
+                },
+            }
+        }],
+    })
+    error = res.get('error')
+    assert error is None, str(error)
+
+    # Now that we have proper kinit as domain admin
+    # we can nuke stale DNS entries from orbit.
+    #
+    res = make_ws_request(ip, {
+        'msg': 'method',
+        'method': 'dnsclient.forward_lookup',
+        'params': [{'names': [f'{hostname}.{AD_DOMAIN}']}]
+    })
+    error = res.get('error')
+    assert error is None, str(error)
+    ips_to_remove = [rdata['address'] for rdata in res['result']]
+
+    payload = []
+    for ip in ips_to_remove:
+        addr = ipaddress(ip)
+        payload.append({
+            'command': 'DELETE',
+            'name': f'{hostname}.{AD_DOMAIN}.',
+            'address': str(addr),
+            'type': 'A' if addr.version == 4 else 'AAAA'
+        })
+
+    res = make_ws_request(ip, {
+        'msg': 'method',
+        'method': 'dns.nsupdate',
+        'params': [{'ops': payload}]
+    })
+    error = res.get('error')
+    assert error is None, str(error)
 
 
 def test_03_get_activedirectory_data(request):
