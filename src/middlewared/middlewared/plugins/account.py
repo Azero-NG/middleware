@@ -1,7 +1,10 @@
 from middlewared.schema import accepts, Any, Bool, Dict, Int, List, Patch, returns, Str
 from middlewared.service import (
-    CallError, CRUDService, ValidationErrors, item_method, no_auth_required, pass_app, private, filterable, job
+    CallError, CRUDService, ValidationErrors,
+    item_method, no_auth_required, pass_app,
+    private, filterable, job
 )
+from middlewared.service_exception import InstanceNotFound
 import middlewared.sqlalchemy as sa
 from middlewared.utils import run, filter_list
 from middlewared.validators import Email
@@ -781,28 +784,34 @@ class UserService(CRUDService):
 
     @item_method
     @accepts(
-        Int('id'),
+        Int('uid'),
         Str('key'),
         Any('value'),
     )
     @returns(Bool())
-    async def set_attribute(self, pk, key, value):
+    async def set_attribute(self, uid, key, value):
         """
         Set user general purpose `attributes` dictionary `key` to `value`.
 
+        `uid`: integer representing the uid of the user to change
+        `key`: str representing the name of the key to be used in the dictionary
+        `value`: any type representing the value to be tied to `key` in the dictionary
+
         e.g. Setting key="foo" value="var" will result in {"attributes": {"foo": "bar"}}
         """
-        user = await self.get_instance(pk)
-
-        user['attributes'][key] = value
-
-        await self.middleware.call(
-            'datastore.update',
-            'account.bsdusers',
-            pk,
-            {'attributes': user['attributes']},
-            {'prefix': 'bsdusr_'}
-        )
+        try:
+            user = await self.get_user_obj({'uid': uid})
+        except KeyError:
+            raise InstanceNotFound('user.set_attribute', f'{uid!r} does not exist')
+        else:
+            user['attributes'][key] = value
+            await self.middleware.call(
+                'datastore.update',
+                'account.bsdusers',
+                [['uid', '=', uid]],
+                {'attributes': user['attributes']},
+                {'prefix': 'bsdusr_'}
+            )
 
         return True
 
