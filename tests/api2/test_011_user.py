@@ -16,20 +16,20 @@ apifolder = os.getcwd()
 sys.path.append(apifolder)
 from functions import POST, GET, DELETE, PUT, SSH_TEST, wait_on_job
 from auto_config import pool_name, ha, password, user, ip
+
+TEST_USERNAME = 'testuser'
 SHELL = '/usr/bin/bash'
 GROUP = 'root'
 DEFAULT_HOMEDIR_OCTAL = 0o40700
 group_id = GET(f'/group/?group={GROUP}', controller_a=ha).json()[0]['id']
 dataset = f"{pool_name}/test_homes"
 dataset_url = dataset.replace('/', '%2F')
-
 home_files = {
     "~/": oct(DEFAULT_HOMEDIR_OCTAL),
     "~/.profile": "0o100644",
     "~/.ssh": "0o40700",
     "~/.ssh/authorized_keys": "0o100600",
 }
-
 home_acl = [
     {
         "tag": "owner@",
@@ -80,7 +80,7 @@ def test_02_creating_user_testuser(request):
     """
     global user_id
     payload = {
-        "username": "testuser",
+        "username": TEST_USERNAME,
         "full_name": "Test User",
         "group_create": True,
         "password": "test1234",
@@ -102,7 +102,7 @@ def test_03_verify_post_user_do_not_leak_password_in_middleware_log(request):
 
 def test_04_verify_user_was_created(request):
     depends(request, ["user_02", "user_01"])
-    results = GET('/user?username=testuser')
+    results = GET(f'/user?username={TEST_USERNAME}')
     assert len(results.json()) == 1, results.text
 
     u = results.json()[0]
@@ -110,11 +110,11 @@ def test_04_verify_user_was_created(request):
     to_check = [
         {
             'file': '/etc/shadow',
-            'value': f'testuser:{u["unixhash"]}:18397:0:99999:7:::'
+            'value': f'{TEST_USERNAME}:{u["unixhash"]}:18397:0:99999:7:::'
         },
         {
             'file': '/etc/passwd',
-            'value': f'testuser:x:{u["uid"]}:{u["group"]["bsdgrp_gid"]}:{u["full_name"]}:{u["home"]}:{u["shell"]}'
+            'value': f'{TEST_USERNAME}:x:{u["uid"]}:{u["group"]["bsdgrp_gid"]}:{u["full_name"]}:{u["home"]}:{u["shell"]}'
         },
         {
             'file': '/etc/group',
@@ -130,7 +130,7 @@ def test_05_verify_user_exists(request):
     get_user_obj is a wrapper around the pwd module.
     This check verifies that the user is _actually_ created.
     """
-    results = POST("/user/get_user_obj/", {"username": "testuser"})
+    results = POST("/user/get_user_obj/", {"username": TEST_USERNAME})
     assert results.status_code == 200, results.text
     if results.status_code == 200:
         pw = results.json()
@@ -148,7 +148,7 @@ def test_06_get_user_info(request):
 
 def test_07_look_user_name(request):
     depends(request, ["user_02", "user_01"])
-    assert userinfo["username"] == "testuser"
+    assert userinfo["username"] == TEST_USERNAME
 
 
 def test_08_look_user_full_name(request):
@@ -194,11 +194,11 @@ def test_13_next_and_new_next_uid_not_equal(request):
 def test_14_setting_user_groups(request):
     depends(request, ["user_02", "user_01"])
     payload = {'groups': [group_id]}
-    GET('/user?username=testuser').json()[0]['id']
+    GET(f'/user?username={TEST_USERNAME}').json()[0]['id']
     results = PUT(f"/user/id/{user_id}/", payload)
     assert results.status_code == 200, results.text
 
-    payload = {"username": "testuser", "get_groups": True}
+    payload = {"username": TEST_USERNAME, "get_groups": True}
     results = POST("/user/get_user_obj/", payload)
     assert results.status_code == 200, results.text
 
@@ -206,8 +206,7 @@ def test_14_setting_user_groups(request):
     assert 0 in grouplist, results.text
 
 
-# Update tests
-# Update the testuser
+# Update the local user named `TEST_USERNAME`
 def test_15_updating_user_testuser_info(request):
     depends(request, ["user_02", "user_01"])
     payload = {"full_name": "Test Renamed",
@@ -227,7 +226,7 @@ def test_16_verify_put_user_do_not_leak_password_in_middleware_log(request):
 def test_17_get_user_new_info(request):
     depends(request, ["user_02", "user_01"])
     global userinfo
-    userinfo = GET('/user?username=testuser').json()[0]
+    userinfo = GET(f'/user?username={TEST_USERNAME}').json()[0]
 
 
 def test_18_look_user_full_name(request):
@@ -259,7 +258,7 @@ def test_22_add_new_team_to_special_atribute(request):
     assert results.status_code == 200, results.text
 
 
-# Delete the testuser
+# Delete the local user named `TEST_USERNAME`
 def test_23_deleting_user_testuser(request):
     depends(request, ["user_02", "user_01"])
     results = DELETE(f"/user/id/{user_id}/", {"delete_group": True})
@@ -268,7 +267,7 @@ def test_23_deleting_user_testuser(request):
 
 def test_24_look_user_is_delete(request):
     depends(request, ["user_02", "user_01"])
-    assert len(GET('/user?username=testuser').json()) == 0
+    assert len(GET(f'/user?username={TEST_USERNAME}').json()) == 0
 
 
 def test_25_has_local_administrator_set_up(request):
