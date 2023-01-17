@@ -166,16 +166,14 @@ def test_10_look_user_shell(request):
     assert userinfo["shell"] == SHELL
 
 
-def test_11_add_employee_id_and_team_special_attributes(request):
+def test_11_user_set_attribute(request):
     depends(request, ["user_02", "user_01"])
-    payload = {
-        'key': 'Employee ID',
-        'value': 'TU1234',
-        'key': 'Team',
-        'value': 'QA'
-    }
+    payload = {'key': 'Team', 'value': 'QA'}
     results = POST(f"/user/id/{user_id}/set_attribute/", payload)
     assert results.status_code == 200, results.text
+
+    rv = results.json()
+    assert rv['attributes']['Team'] == 'QA', rv['attributes']
 
 
 def test_12_get_new_next_uid(request):
