@@ -655,15 +655,20 @@ class TDBWrapConfigService(ConfigService):
 
     @private
     async def db_healthy(self):
-        health = await self.middleware.call("tdb.health", {
-            "name": self._config.service,
-            "tdb-options": self.tdb_options.copy(),
-        })
-        if health == "OK":
-            return True
+        try:
+            health = await self.middleware.call("tdb.health", {
+                "name": self._config.service,
+                "tdb-options": self.tdb_options.copy(),
+            })
+        except Exception:
+            self.logger.warning("%s: ctdb volume health status check failed.",
+                                self._config.service, exc_info=True)
+        else:
+            if health == "OK":
+                return True
 
-        self.logger.warning("%s: health status is [%s] returning default value",
-                            self._config.service, health)
+            self.logger.warning("%s: health status is [%s] returning default value",
+                                self._config.service, health)
         return False
 
     @accepts()
@@ -1340,15 +1345,21 @@ class TDBWrapCRUDService(CRUDService):
 
     @private
     async def db_healthy(self):
-        health = await self.middleware.call("tdb.health", {
-            "name": self._config.namespace,
-            "tdb-options": self.tdb_options.copy(),
-        })
-        if health == "OK":
-            return True
+        try:
+            health = await self.middleware.call("tdb.health", {
+                "name": self._config.namespace,
+                "tdb-options": self.tdb_options.copy(),
+            })
+        except Exception:
+            self.logger.warning("%s: ctdb volume health status check failed.",
+                                self._config.service, exc_info=True)
+        else:
+            if health == "OK":
+                return True
 
-        self.logger.warning("%s: health status is [%s] returning default value",
-                            self._config.service, health)
+            self.logger.warning("%s: health status is [%s] returning default value",
+                                self._config.service, health)
+
         return False
 
     @filterable
