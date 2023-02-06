@@ -1,5 +1,6 @@
 import asyncio
 import binascii
+import contextlib
 import ctypes
 import glob
 import ipaddress
@@ -46,20 +47,18 @@ class KernelDlm(object):
     COMMS_DIR = CLUSTER_DIR + '/comms'
 
     def __init__(self, name):
-        if not os.path.isdir(KernelDlm.CLUSTER_DIR):
-            os.mkdir(KernelDlm.CLUSTER_DIR)
-            with open(os.path.join(KernelDlm.CLUSTER_DIR, 'cluster_name'), 'w') as f:
-                f.write(name)
-        if not os.path.isdir(KernelDlm.SPACES_DIR):
-            os.mkdir(KernelDlm.SPACES_DIR)
-        if not os.path.isdir(KernelDlm.COMMS_DIR):
-            os.mkdir(KernelDlm.COMMS_DIR)
+        with contextlib.suppress(FileExistsError):
+            for d in (KernelDlm.CLUSTER_DIR, KernelDlm.SPACES_DIR, KernelDlm.COMMS_DIR):
+                os.mkdir(d)
+                if d == KernelDlm.CLUSTER_DIR:
+                    with open(f'{d}/cluster_name', 'w') as f:
+                        f.write(name)
         self.stopped = {}
 
     def comms_add_node(self, nodeid, addr, local, port=0, mark=None):
         # Create comms directory for this node if necessary
         node_path = os.path.join(KernelDlm.COMMS_DIR, str(nodeid))
-        if not os.path.isdir(node_path):
+        with contextlib.suppress(FileExistsError):
             os.mkdir(node_path)
 
             # Set the nodeid
@@ -84,7 +83,7 @@ class KernelDlm(object):
 
     def comms_remove_node(self, nodeid):
         node_path = os.path.join(KernelDlm.COMMS_DIR, str(nodeid))
-        if os.path.isdir(node_path):
+        with contextlib.suppress(FileNotFoundError):
             os.rmdir(node_path)
 
     def set_sysfs(self, section, attribute, value):
@@ -133,26 +132,27 @@ class KernelDlm(object):
         Add the specified node to the lockspace
         """
         spaces_path = os.path.join(KernelDlm.SPACES_DIR, lockspace_name)
-        if not os.path.isdir(spaces_path):
+        with contextlib.suppress(FileExistsError):
             os.mkdir(spaces_path)
         # Check to see if we already have the directory, and remove it if so
         # so dlm-kernel can notice they've left and rejoined.
         node_path = os.path.join(spaces_path, 'nodes', '%d' % nodeid)
-        if os.path.isdir(node_path):
+        with contextlib.suppress(FileNotFoundError):
             os.rmdir(node_path)
-        os.mkdir(node_path)
-        with open(os.path.join(node_path, 'nodeid'), 'w') as f:
-            f.write(str(nodeid))
-        if weight is not None:
-            with open(os.path.join(node_path, 'weight'), 'w') as f:
-                f.write(str(weight))
+        with contextlib.suppress(FileExistsError):
+            os.mkdir(node_path)
+            with open(os.path.join(node_path, 'nodeid'), 'w') as f:
+                f.write(str(nodeid))
+            if weight is not None:
+                with open(os.path.join(node_path, 'weight'), 'w') as f:
+                    f.write(str(weight))
 
     def lockspace_remove_node(self, lockspace_name, nodeid):
         """
         Remove the specified nodeid from the lockspace.
         """
         node_path = os.path.join(KernelDlm.SPACES_DIR, lockspace_name, 'nodes', '%d' % nodeid)
-        if os.path.isdir(node_path):
+        with contextlib.suppress(FileNotFoundError):
             os.rmdir(node_path)
 
     def lockspace_leave(self, lockspace_name):
@@ -162,7 +162,7 @@ class KernelDlm(object):
         Remove all nodes and delete the lockspace.
         """
         spaces_path = os.path.join(KernelDlm.SPACES_DIR, lockspace_name)
-        if os.path.isdir(spaces_path):
+        with contextlib.suppress(FileNotFoundError):
             for d in glob.glob(os.path.join(spaces_path, 'nodes', '*')):
                 os.rmdir(d)
             os.rmdir(spaces_path)
@@ -170,7 +170,7 @@ class KernelDlm(object):
             del self.stopped[lockspace_name]
 
     def destroy(self):
-        if os.path.isdir(KernelDlm.CLUSTER_DIR):
+        with contextlib.suppress(FileNotFoundError):
             for dirname in glob.glob(os.path.join(KernelDlm.COMMS_DIR, '*')):
                 os.rmdir(dirname)
             for dirname in glob.glob(os.path.join(KernelDlm.SPACES_DIR, '*')):
@@ -216,9 +216,7 @@ class DistributedLockManager(Service):
 
         It makes no guarantees that the remote node is currently accessible.
         """
-        ha_hardware = await self.middleware.call('system.product_type') == 'SCALE_ENTERPRISE'
-        ha_licensed = await self.middleware.call('failover.licensed')
-        if ha_hardware and ha_licensed:
+        if await self.middleware.call('failover.licensed'):
             self.node = await self.middleware.call('failover.node')
             self.nodes[1] = {'ip': '169.254.10.1', 'local': self.node == 'A'}
             self.nodes[2] = {'ip': '169.254.10.2', 'local': self.node == 'B'}
