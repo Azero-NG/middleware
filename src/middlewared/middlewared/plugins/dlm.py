@@ -227,6 +227,8 @@ class DistributedLockManager(Service):
         for nodeid, node in self.nodes.items():
             if node['local']:
                 self.nodeID = nodeid
+            else:
+                self.peernodeID = nodeid
 
     @private
     async def create(self):
@@ -458,7 +460,14 @@ class DistributedLockManager(Service):
                 await asyncio.gather(*[self.leave_kernel_lockspace(node_id, lockspace_name, nodeid) for node_id in nodeIDs])
                 await asyncio.gather(*[self.start_kernel_lockspace(node_id, lockspace_name) for node_id in nodeIDs])
 
-            self.kernel_dlm.comms_remove_node(nodeid)
+            # self.kernel_dlm.comms_remove_node(nodeid)
+
+    @private
+    async def remote_down(self):
+        """
+        Handle a node HA remote node going down.
+        """
+        self.logger.info('Remote node %s down', self.peernodeID)
 
 
 async def udev_dlm_hook(middleware, data):
@@ -485,10 +494,11 @@ async def udev_dlm_hook(middleware, data):
         await middleware.call('dlm.leave_lockspace', lockspace)
 
 
-# def remote_status_event(middleware, *args, **kwargs):
-#    middleware.call_sync('dlm.status_refresh')
+def remote_down_event(middleware, *args, **kwargs):
+    middleware.call_sync('dlm.remote_down')
+
 
 async def setup(middleware):
     middleware.register_hook('udev.dlm', udev_dlm_hook)
     # await middleware.call('failover.remote_on_connect', remote_status_event)
-    # await middleware.call('failover.remote_on_disconnect', remote_status_event)
+    await middleware.call('failover.remote_on_disconnect', remote_down_event)
