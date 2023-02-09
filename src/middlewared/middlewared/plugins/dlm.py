@@ -47,8 +47,8 @@ class KernelDlm(object):
     COMMS_DIR = CLUSTER_DIR + '/comms'
 
     def __init__(self, name):
-        with contextlib.suppress(FileExistsError):
-            for d in (KernelDlm.CLUSTER_DIR, KernelDlm.SPACES_DIR, KernelDlm.COMMS_DIR):
+        for d in (KernelDlm.CLUSTER_DIR, KernelDlm.SPACES_DIR, KernelDlm.COMMS_DIR):
+            with contextlib.suppress(FileExistsError):
                 os.mkdir(d)
                 if d == KernelDlm.CLUSTER_DIR:
                     with open(f'{d}/cluster_name', 'w') as f:
