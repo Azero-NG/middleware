@@ -56,6 +56,7 @@ class SSHService(SystemServiceService):
         'ssh_entry',
         List('bindiface', items=[Str('iface')], required=True),
         Int('tcpport', validators=[Range(min=1, max=65535)], required=True),
+        Bool('rootlogin'),
         Bool('passwordauth', required=True),
         Bool('kerberosauth', required=True),
         Bool('tcpfwd', required=True),
@@ -141,6 +142,7 @@ class SSHService(SystemServiceService):
             }
 
         """
+        data.pop('rootlogin', None)
         old = await self.config()
 
         new = old.copy()
