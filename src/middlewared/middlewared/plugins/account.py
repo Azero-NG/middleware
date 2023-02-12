@@ -118,6 +118,7 @@ class UserModel(sa.Model):
     bsdusr_builtin = sa.Column(sa.Boolean(), default=False)
     bsdusr_smb = sa.Column(sa.Boolean(), default=True)
     bsdusr_password_disabled = sa.Column(sa.Boolean(), default=False)
+    bsdusr_ssh_password_enabled = sa.Column(sa.Boolean(), default=False)
     bsdusr_locked = sa.Column(sa.Boolean(), default=False)
     bsdusr_sudo_commands = sa.Column(sa.JSON(type=list))
     bsdusr_sudo_commands_nopasswd = sa.Column(sa.JSON(type=list))
@@ -295,6 +296,7 @@ class UserService(CRUDService):
         Str('email', validators=[Email()], null=True, default=None),
         Str('password', private=True),
         Bool('password_disabled', default=False),
+        Bool('ssh_password_enabled', default=False),
         Bool('locked', default=False),
         Bool('smb', default=True),
         List('sudo_commands', items=[Str('command', empty=False)]),
@@ -436,6 +438,7 @@ class UserService(CRUDService):
                 shutil.rmtree(data['home'])
             raise
 
+        await self.middleware.call('service.reload', 'ssh')
         await self.middleware.call('service.reload', 'user')
 
         if data['smb']:
@@ -643,6 +646,7 @@ class UserService(CRUDService):
         user = await self.user_compress(user)
         await self.middleware.call('datastore.update', 'account.bsdusers', pk, user, {'prefix': 'bsdusr_'})
 
+        await self.middleware.call('service.reload', 'ssh')
         await self.middleware.call('service.reload', 'user')
         if user['smb'] and must_change_pdb_entry:
             gm_job = await self.middleware.call('smb.synchronize_passdb')
@@ -714,6 +718,7 @@ class UserService(CRUDService):
                 )
 
         await self.middleware.call('datastore.delete', 'account.bsdusers', pk)
+        await self.middleware.call('service.reload', 'ssh')
         await self.middleware.call('service.reload', 'user')
         await self.middleware.call('idmap.flush_gencache')
 
@@ -1249,6 +1254,7 @@ class GroupModel(sa.Model):
     bsdgrp_gid = sa.Column(sa.Integer())
     bsdgrp_group = sa.Column(sa.String(120), unique=True)
     bsdgrp_builtin = sa.Column(sa.Boolean(), default=False)
+    bsdgrp_ssh_password_enabled = sa.Column(sa.Boolean(), default=False)
     bsdgrp_sudo_commands = sa.Column(sa.JSON(type=list))
     bsdgrp_sudo_commands_nopasswd = sa.Column(sa.JSON(type=list))
     bsdgrp_smb = sa.Column(sa.Boolean(), default=True)
@@ -1401,6 +1407,7 @@ class GroupService(CRUDService):
         Int('gid'),
         Str('name', required=True),
         Bool('smb', default=True),
+        Bool('ssh_password_enabled', default=False),
         List('sudo_commands', items=[Str('command', empty=False)]),
         List('sudo_commands_nopasswd', items=[Str('command', empty=False)]),
         Bool('allow_duplicate_gid', default=False),
@@ -1446,6 +1453,7 @@ class GroupService(CRUDService):
             )
 
         if reload_users:
+            await self.middleware.call('service.reload', 'ssh')
             await self.middleware.call('service.reload', 'user')
 
         if data['smb']:
@@ -1526,6 +1534,7 @@ class GroupService(CRUDService):
                     {'bsdgrpmember_group': pk, 'bsdgrpmember_user': i},
                 )
 
+        await self.middleware.call('service.reload', 'ssh')
         await self.middleware.call('service.reload', 'user')
 
         if groupmap_changed:
@@ -1566,6 +1575,7 @@ class GroupService(CRUDService):
             gm_job = await self.middleware.call('smb.synchronize_group_mappings')
             await gm_job.wait()
 
+        await self.middleware.call('service.reload', 'ssh')
         await self.middleware.call('service.reload', 'user')
         await self.middleware.call('idmap.flush_gencache')
 
