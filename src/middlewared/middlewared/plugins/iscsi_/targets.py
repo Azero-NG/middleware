@@ -1,11 +1,14 @@
+import asyncio
 import errno
+import pathlib
 import re
+import subprocess
 
 import middlewared.sqlalchemy as sa
 
 from middlewared.schema import accepts, Bool, Dict, Int, IPAddr, List, Patch, Str
 from middlewared.service import CallError, CRUDService, private, ValidationErrors
-from middlewared.utils import run
+from middlewared.utils import UnexpectedFailure, run
 
 from .utils import AUTHMETHOD_LEGACY_MAP
 
@@ -370,3 +373,154 @@ class iSCSITargetService(CRUDService):
         if data.get("alias", None) == "":
             data['alias'] = None
         return data
+
+    @private
+    async def discover(self, ip):
+         cmd = ['iscsiadm', '-m', 'discovery', '-t', 'st', '-p', ip]
+         err = f'DISCOVER: {ip!r}'
+         try:
+             cp = await run(cmd, stderr=subprocess.STDOUT, encoding='utf-8')
+         except Exception as e:
+             err += f' ERROR: {str(e)}'
+             raise UnexpectedFailure(err)
+         else:
+             if cp.returncode != 0:
+                 err += f' ERROR: {cp.stdout}'
+                 raise OSError(cp.returncode, os.strerror(cp.returncode), err)
+
+    @private
+    async def login_iqn(self, ip, iqn, no_wait=False):
+         cmd = ['iscsiadm', '-m', 'node', '-p', ip, '-T', iqn, '--login']
+         if no_wait:
+             cmd.append('--no_wait')
+         err = f'LOGIN: {ip!r} {iqn!r}'
+         try:
+             cp = await run(cmd, stderr=subprocess.STDOUT, encoding='utf-8')
+         except Exception as e:
+             err += f' ERROR: {str(e)}'
+             raise UnexpectedFailure(err)
+         else:
+             if cp.returncode != 0:
+                 err += f' ERROR: {cp.stdout}'
+                 raise OSError(cp.returncode, os.strerror(cp.returncode), err)
+
+    @private
+    async def logout_iqn(self, ip, iqn, no_wait=False):
+         cmd = ['iscsiadm', '-m', 'node', '-p', ip, '-T', iqn, '--logout']
+         if no_wait:
+             cmd.append('--no_wait')
+         err = f'LOGOUT: {ip!r} {iqn!r}'
+         try:
+             cp = await run(cmd, stderr=subprocess.STDOUT, encoding='utf-8')
+         except Exception as e:
+             err += f' ERROR: {str(e)}'
+             raise UnexpectedFailure(err)
+         else:
+             if cp.returncode != 0:
+                 err += f' ERROR: {cp.stdout}'
+                 raise OSError(cp.returncode, os.strerror(cp.returncode), err)
+
+    @private
+    async def logged_in_iqns(self):
+        results = set()
+        p = pathlib.Path('/sys/devices/platform')
+        for targetname in p.glob('host*/session*/iscsi_session/session*/targetname'):
+            results.add(targetname.read_text().strip())
+        return list(results)
+
+    @private
+    async def login_ha_targets(self, no_wait=False, raise_error=False):
+        """
+        When called on a HA BACKUP node will attempt to login to all internal HA targets,
+        used in ALUA.
+
+        :return: dict keyed by target name, with a boolean value True if logged in
+        """
+        targets = await self.middleware.call('iscsi.target.query')
+        global_basename = (await self.middleware.call('iscsi.global.config'))['basename']
+
+        iqns = {}
+        for target in targets:
+            name = target['name']
+            iqns[name] = f'{global_basename}:HA:{name}'
+
+        # Check what's already logged in
+        existing = await self.middleware.call('iscsi.target.logged_in_iqns')
+
+        # Generate the set of things we want to login
+        todo = set()
+        for iqn in iqns.values():
+            if iqn not in existing:
+                todo.add(iqn)
+
+        if todo:
+            # First we need to do an iscsiadm discovery
+            remote_ip = await self.middleware.call('failover.remote_ip')
+            await self.discover(remote_ip)
+
+            # Then login the targets (in parallel)
+            exceptions = await asyncio.gather(*[self.login_iqn(remote_ip, iqn, no_wait) for iqn in todo], return_exceptions=True)
+            failures = []
+            for iqn, exc in zip(todo, exceptions):
+                if isinstance(exc, Exception):
+                    failures.append(str(exc))
+                else:
+                    self.logger.info('Successfully logged into %r', iqn)
+
+                if failures:
+                    err = f'Failure logging in to targets: {", ".join(failures)}'
+                    if raise_error:
+                        raise CallError(err)
+                    else:
+                        self.logger.error(err)
+
+            # Regen existing as it should have now changed
+            existing = await self.middleware.call('iscsi.target.logged_in_iqns')
+
+        # Now calculate the result to hand back.
+        result = {}
+        for name,iqn in iqns.items():
+            result[name] = iqn in existing
+        return result
+
+    @private
+    async def logout_ha_targets(self, no_wait=False, raise_error=False):
+        """
+        When called on a HA BACKUP node will attempt to login to all internal HA targets,
+        used in ALUA.
+        """
+        targets = await self.middleware.call('iscsi.target.query')
+        global_basename = (await self.middleware.call('iscsi.global.config'))['basename']
+
+        iqns = {}
+        for target in targets:
+            name = target['name']
+            iqns[name] = f'{global_basename}:HA:{name}'
+
+        # Check what's already logged in
+        existing = await self.middleware.call('iscsi.target.logged_in_iqns')
+
+        # Generate the set of things we want to logout (don't assume every IQN, just the HA ones)
+        todo = set()
+        for iqn in iqns.values():
+            if iqn in existing:
+                todo.add(iqn)
+
+        if todo:
+            remote_ip = await self.middleware.call('failover.remote_ip')
+
+            # Logout the targets (in parallel)
+            exceptions = await asyncio.gather(*[self.logout_iqn(remote_ip, iqn, no_wait) for iqn in todo], return_exceptions=True)
+            failures = []
+            for iqn, exc in zip(todo, exceptions):
+                if isinstance(exc, Exception):
+                    failures.append(str(exc))
+                else:
+                    self.logger.info('Successfully logged out from %r', iqn)
+
+                if failures:
+                    err = f'Failure logging out from targets: {", ".join(failures)}'
+                    if raise_error:
+                        raise CallError(err)
+                    else:
+                        self.logger.error(err)
