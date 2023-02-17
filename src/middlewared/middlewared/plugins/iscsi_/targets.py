@@ -1,5 +1,6 @@
 import asyncio
 import errno
+import os
 import pathlib
 import re
 import subprocess
@@ -376,49 +377,49 @@ class iSCSITargetService(CRUDService):
 
     @private
     async def discover(self, ip):
-         cmd = ['iscsiadm', '-m', 'discovery', '-t', 'st', '-p', ip]
-         err = f'DISCOVER: {ip!r}'
-         try:
-             cp = await run(cmd, stderr=subprocess.STDOUT, encoding='utf-8')
-         except Exception as e:
-             err += f' ERROR: {str(e)}'
-             raise UnexpectedFailure(err)
-         else:
-             if cp.returncode != 0:
-                 err += f' ERROR: {cp.stdout}'
-                 raise OSError(cp.returncode, os.strerror(cp.returncode), err)
+        cmd = ['iscsiadm', '-m', 'discovery', '-t', 'st', '-p', ip]
+        err = f'DISCOVER: {ip!r}'
+        try:
+            cp = await run(cmd, stderr=subprocess.STDOUT, encoding='utf-8')
+        except Exception as e:
+            err += f' ERROR: {str(e)}'
+            raise UnexpectedFailure(err)
+        else:
+            if cp.returncode != 0:
+                err += f' ERROR: {cp.stdout}'
+                raise OSError(cp.returncode, os.strerror(cp.returncode), err)
 
     @private
     async def login_iqn(self, ip, iqn, no_wait=False):
-         cmd = ['iscsiadm', '-m', 'node', '-p', ip, '-T', iqn, '--login']
-         if no_wait:
-             cmd.append('--no_wait')
-         err = f'LOGIN: {ip!r} {iqn!r}'
-         try:
-             cp = await run(cmd, stderr=subprocess.STDOUT, encoding='utf-8')
-         except Exception as e:
-             err += f' ERROR: {str(e)}'
-             raise UnexpectedFailure(err)
-         else:
-             if cp.returncode != 0:
-                 err += f' ERROR: {cp.stdout}'
-                 raise OSError(cp.returncode, os.strerror(cp.returncode), err)
+        cmd = ['iscsiadm', '-m', 'node', '-p', ip, '-T', iqn, '--login']
+        if no_wait:
+            cmd.append('--no_wait')
+        err = f'LOGIN: {ip!r} {iqn!r}'
+        try:
+            cp = await run(cmd, stderr=subprocess.STDOUT, encoding='utf-8')
+        except Exception as e:
+            err += f' ERROR: {str(e)}'
+            raise UnexpectedFailure(err)
+        else:
+            if cp.returncode != 0:
+                err += f' ERROR: {cp.stdout}'
+                raise OSError(cp.returncode, os.strerror(cp.returncode), err)
 
     @private
     async def logout_iqn(self, ip, iqn, no_wait=False):
-         cmd = ['iscsiadm', '-m', 'node', '-p', ip, '-T', iqn, '--logout']
-         if no_wait:
-             cmd.append('--no_wait')
-         err = f'LOGOUT: {ip!r} {iqn!r}'
-         try:
-             cp = await run(cmd, stderr=subprocess.STDOUT, encoding='utf-8')
-         except Exception as e:
-             err += f' ERROR: {str(e)}'
-             raise UnexpectedFailure(err)
-         else:
-             if cp.returncode != 0:
-                 err += f' ERROR: {cp.stdout}'
-                 raise OSError(cp.returncode, os.strerror(cp.returncode), err)
+        cmd = ['iscsiadm', '-m', 'node', '-p', ip, '-T', iqn, '--logout']
+        if no_wait:
+            cmd.append('--no_wait')
+        err = f'LOGOUT: {ip!r} {iqn!r}'
+        try:
+            cp = await run(cmd, stderr=subprocess.STDOUT, encoding='utf-8')
+        except Exception as e:
+            err += f' ERROR: {str(e)}'
+            raise UnexpectedFailure(err)
+        else:
+            if cp.returncode != 0:
+                err += f' ERROR: {cp.stdout}'
+                raise OSError(cp.returncode, os.strerror(cp.returncode), err)
 
     @private
     async def logged_in_iqns(self):
@@ -479,7 +480,7 @@ class iSCSITargetService(CRUDService):
 
         # Now calculate the result to hand back.
         result = {}
-        for name,iqn in iqns.items():
+        for name, iqn in iqns.items():
             result[name] = iqn in existing
         return result
 
