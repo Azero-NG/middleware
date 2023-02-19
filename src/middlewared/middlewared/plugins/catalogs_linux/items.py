@@ -43,7 +43,7 @@ class CatalogService(Service):
                     'app_readme': 'app readme here',
                     'location': '/mnt/evo/ix-applications/catalogs/github_com_truenas_charts_git_master/charts/chia',
                     'healthy': True,
-                    'healthy_error': False,
+                    'healthy_error': None,
                     'latest_version': '1.2.0',
                     'latest_app_version': '1.1.6',
                     'icon_url': 'https://www.chia.net/img/chia_logo.svg',
