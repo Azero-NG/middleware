@@ -281,7 +281,7 @@ class KubernetesGPUService(Service):
             return
 
         for command in (
-            ['modprobe', 'nvidia-current-uvm'],
+            ['modprobe', 'nvidia-uvm'],
             ['nvidia-modprobe', '-c0', '-u'],
         ):
             cp = await run(command, check=False)
