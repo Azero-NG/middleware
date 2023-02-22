@@ -6,7 +6,7 @@ import os.path
 import middlewared.sqlalchemy as sa
 
 from middlewared.common.listen import ConfigServiceListenSingleDelegate
-from middlewared.schema import Bool, Dict, Int, IPAddr, Patch, returns, Str
+from middlewared.schema import Bool, Dict, Int, IPAddr, Patch, returns, Str, List
 from middlewared.service import accepts, CallError, job, private, ConfigService, ValidationErrors
 
 from .k8s import ApiException, Node
@@ -18,14 +18,14 @@ class KubernetesModel(sa.Model):
 
     id = sa.Column(sa.Integer(), primary_key=True)
     pool = sa.Column(sa.String(255), default=None, nullable=True)
-    cluster_cidr = sa.Column(sa.String(128), default='')
-    service_cidr = sa.Column(sa.String(128), default='')
+    cluster_cidr = sa.Column(sa.JSON(type=list))
+    service_cidr = sa.Column(sa.JSON(type=list))
     cluster_dns_ip = sa.Column(sa.String(128), default='')
     route_v4_interface = sa.Column(sa.String(128), nullable=True)
     route_v4_gateway = sa.Column(sa.String(128), nullable=True)
     route_v6_interface = sa.Column(sa.String(128), nullable=True)
     route_v6_gateway = sa.Column(sa.String(128), nullable=True)
-    node_ip = sa.Column(sa.String(128), default='0.0.0.0')
+    node_ip = sa.Column(sa.JSON(type=list))
     cni_config = sa.Column(sa.JSON(type=dict), default={})
     configure_gpus = sa.Column(sa.Boolean(), default=True, nullable=False)
     servicelb = sa.Column(sa.Boolean(), default=True, nullable=False)
@@ -49,10 +49,10 @@ class KubernetesService(ConfigService):
         Bool('validate_host_path', required=True),
         Bool('passthrough_mode', required=True),
         Str('pool', required=True, null=True),
-        IPAddr('cluster_cidr', required=True, cidr=True, empty=True),
-        IPAddr('service_cidr', required=True, cidr=True, empty=True),
+        List('cluster_cidr', items=[IPAddr('addr', cidr=True, empty=True)], empty=True, required=True),
+        List('service_cidr', items=[IPAddr('addr', cidr=True, empty=True)], empty=True, required=True),
         IPAddr('cluster_dns_ip', required=True, empty=True),
-        IPAddr('node_ip', required=True),
+        List('node_ip', items=[IPAddr('addr', cidr=True, empty=True)], required=True),
         Str('route_v4_interface', required=True, null=True),
         IPAddr('route_v4_gateway', required=True, null=True, v6=False),
         Str('route_v6_interface', required=True, null=True),
@@ -294,36 +294,45 @@ class KubernetesService(ConfigService):
                 unused_cidrs.pop(0)
 
         if unused_cidrs and not data['cluster_cidr']:
-            data['cluster_cidr'] = unused_cidrs.pop(0)
+            data['cluster_cidr'] = [unused_cidrs.pop(0)]
 
         if unused_cidrs and not data['service_cidr']:
-            data['service_cidr'] = unused_cidrs.pop(0)
+            data['service_cidr'] = [unused_cidrs.pop(0)]
 
         if not data['cluster_dns_ip']:
             if data['service_cidr']:
                 # Picking 10th ip ( which is the usual default ) from service cidr
-                data['cluster_dns_ip'] = str(list(ipaddress.ip_network(data['service_cidr'], False).hosts())[9])
+                data['cluster_dns_ip'] = str(list(ipaddress.ip_network(data['service_cidr'][0], False).hosts())[9])
             else:
                 verrors.add(f'{schema}.cluster_dns_ip', 'Please specify cluster_dns_ip.')
 
         for k in ('cluster_cidr', 'service_cidr'):
             if not data[k]:
                 verrors.add(f'{schema}.{k}', f'Please specify a {k.split("_")[0]} CIDR.')
-            elif any(ipaddress.ip_network(data[k], False).overlaps(cidr) for cidr in network_cidrs):
-                verrors.add(f'{schema}.{k}', 'Requested CIDR is already in use.')
+            else:
+                for kcidr in data[k]:
+                    if any(ipaddress.ip_network(kcidr, False).overlaps(cidr) for cidr in network_cidrs):
+                        verrors.add(f'{schema}.{k}', 'Requested CIDR is already in use.')
 
-        if data['cluster_cidr'] and data['service_cidr'] and ipaddress.ip_network(data['cluster_cidr'], False).overlaps(
-            ipaddress.ip_network(data['service_cidr'], False)
-        ):
-            verrors.add(f'{schema}.cluster_cidr', 'Must not overlap with service CIDR.')
+        if data['cluster_cidr'] and data['service_cidr']:
+            for c_cidr in data['cluster_cidr']:
+                for s_cidr in data['service_cidr']:
+                    if ipaddress.ip_network(c_cidr, False).overlaps(
+                            ipaddress.ip_network(s_cidr, False)
+                        ):
+                        verrors.add(f'{schema}.cluster_cidr', 'Must not overlap with service CIDR.')
 
-        if data['service_cidr'] and data['cluster_dns_ip'] and ipaddress.ip_address(
-            data['cluster_dns_ip']
-        ) not in ipaddress.ip_network(data['service_cidr']):
-            verrors.add(f'{schema}.cluster_dns_ip', 'Must be in range of "service_cidr".')
+        if data['service_cidr'] and data['cluster_dns_ip']:
+            if_in = False
+            for s_cidr in data['service_cidr']:
+                if ipaddress.ip_address(data['cluster_dns_ip']) in ipaddress.ip_network(s_cidr):
+                    if_in = True
+            if not if_in:
+                verrors.add(f'{schema}.cluster_dns_ip', 'Must be in range of "service_cidr".')
 
-        if data['node_ip'] not in await self.bindip_choices():
-            verrors.add(f'{schema}.node_ip', 'Please provide a valid IP address.')
+        for ip in data['node_ip']:
+            if ip not in await self.bindip_choices():
+                verrors.add(f'{schema}.node_ip', 'Please provide a valid IP address.')
 
         if not await self.middleware.call('route.configured_default_ipv4_route'):
             verrors.add(
@@ -492,7 +501,7 @@ class KubernetesService(ConfigService):
         """
         return {
             d['address']: d['address'] for d in await self.middleware.call(
-                'interface.ip_in_use', {'static': True, 'any': True, 'ipv6': False}
+                'interface.ip_in_use', {'static': True, 'any': True, 'ipv6': True}
             )
         }
 

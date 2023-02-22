@@ -1010,7 +1010,7 @@ class InterfaceService(CRUDService):
     def __validate_aliases(self, verrors, schema_name, data, ifaces):
         k8s_config = self.middleware.call_sync('kubernetes.config')
         k8s_networks = [
-            ipaddress.ip_network(k8s_config[k], strict=False) for k in ('cluster_cidr', 'service_cidr')
+            ipaddress.ip_network(cidr, strict=False) for k in ('cluster_cidr', 'service_cidr') for cidr in k8s_config[k]
         ] if k8s_config['dataset'] else []
         used_networks_ipv4 = []
         used_networks_ipv6 = []

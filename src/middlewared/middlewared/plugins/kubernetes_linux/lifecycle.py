@@ -99,11 +99,11 @@ class KubernetesService(Service):
                 '--comment', 'iX Custom Rule to allow access to k8s cluster from internal TrueNAS connections',
                 '--wait'
             ],
-            [
-                'INPUT', '-p', 'tcp', '--dport', '6443', '-j', 'DROP', '-m', 'comment', '--comment',
-                'iX Custom Rule to drop connection requests to k8s cluster from external sources',
-                '--wait'
-            ],
+            # [
+            #     'INPUT', '-p', 'tcp', '--dport', '6443', '-j', 'DROP', '-m', 'comment', '--comment',
+            #     'iX Custom Rule to drop connection requests to k8s cluster from external sources',
+            #     '--wait'
+            # ],
         ]
 
     @private
@@ -117,7 +117,7 @@ class KubernetesService(Service):
             'zfsbackups.zfs.openebs.io',
             'zfssnapshots.zfs.openebs.io',
             'zfsvolumes.zfs.openebs.io',
-            'network-attachment-definitions.k8s.cni.cncf.io',
+            # 'network-attachment-definitions.k8s.cni.cncf.io',
         ]
         while len(
             await self.middleware.call('k8s.crd.query', [['metadata.name', 'in', required_crds]])
@@ -128,7 +128,7 @@ class KubernetesService(Service):
     @private
     async def post_start_internal(self):
         await self.middleware.call('k8s.node.add_taints', [{'key': 'ix-svc-start', 'effect': 'NoExecute'}])
-        await self.middleware.call('k8s.cni.setup_cni')
+        # await self.middleware.call('k8s.cni.setup_cni')
         await self.middleware.call('k8s.gpu.setup')
         try:
             await self.ensure_k8s_crd_are_available()
@@ -178,7 +178,7 @@ class KubernetesService(Service):
 
         # Kube-router configures routes in the main table which we would like to add to kube-router table
         # because it's internal traffic will also be otherwise advertised to the default route specified
-        await self.middleware.call('k8s.cni.add_routes_to_kube_router_table')
+        # await self.middleware.call('k8s.cni.add_routes_to_kube_router_table')
 
     @private
     def k8s_props_default(self):

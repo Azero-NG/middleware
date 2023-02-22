@@ -18,9 +18,20 @@ def render(service, middleware):
         return
 
     kube_controller_args = [
-        f'node-cidr-mask-size={ipaddress.ip_network(config["cluster_cidr"]).prefixlen}',
         'terminated-pod-gc-threshold=5',
     ]
+
+    for cluster_cidr in config["cluster_cidr"][:2]:
+        ip_network = ipaddress.ip_network(cluster_cidr)
+        if type(ip_network) is ipaddress.IPv4Network:
+            kube_controller_args.append(
+                f'node-cidr-mask-size-ipv4={ip_network.prefixlen}'
+            )
+        elif type(ip_network) is ipaddress.IPv6Network:
+            kube_controller_args.append(
+                f'node-cidr-mask-size-ipv6={ip_network.prefixlen}'
+            )
+            
     kube_api_server_args = [
         'service-node-port-range=9000-65535',
         'enable-admission-plugins=NodeRestriction,NamespaceLifecycle,ServiceAccount',
@@ -40,11 +51,11 @@ def render(service, middleware):
 
     with open(FLAGS_PATH, 'w') as f:
         f.write(yaml.dump({
-            'cluster-cidr': config['cluster_cidr'],
-            'service-cidr': config['service_cidr'],
+            'cluster-cidr': ",".join(config['cluster_cidr']),
+            'service-cidr': ",".join(config['service_cidr']),
             'cluster-dns': config['cluster_dns_ip'],
             'data-dir': os.path.join('/mnt', config['dataset'], 'k3s'),
-            'node-ip': config['node_ip'],
+            'node-ip': ",".join(config['node_ip']),
             'node-external-ip': ','.join([
                 interface['address'] for interface in middleware.call_sync('interface.ip_in_use', {'ipv6': False})
             ]),
