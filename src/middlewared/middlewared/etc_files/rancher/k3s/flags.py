@@ -64,6 +64,8 @@ def render(service, middleware):
             'kubelet-arg': kubelet_args,
             'protect-kernel-defaults': True,
             'disable': [features_mapping[feature] for feature in features_mapping if not config[feature]],
+            'flannel-backend': 'host-gw',
+            'flannel-ipv6-masq': True,
         }))
 
     with open('/etc/containerd.json', 'w') as f:
